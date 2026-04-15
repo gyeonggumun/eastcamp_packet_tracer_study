@@ -1,0 +1,75 @@
+dnf install -y mariadb
+
+방화벽 설정
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="192.168.40.0/27" port protocol="tcp" port="3306" accept'
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="192.168.254.10" port protocol="tcp" port="3306" accept'
+
+db생성
+CREATE DATABASE est_company_db;
+
+DB 권한 설정
+웹 전용 접급 계정 생성
+웹에서 접근 가능하도록 설정
+ CREATE USER 'webapp_user'@'192.168.254.10' IDENTIFIED BY 'estweb!2026';
+데이터베이스에만 접근가능하도록 권한 부여
+GRANT ALL PRIVILEGES ON est_company_db.* TO 'webapp_user'@'192.168.254.10';
+
+직원 로그인 정보 담을 테이블 생성
+CREATE TABLE est_company_db.tb_employee (
+    emp_id INT AUTO_INCREMENT PRIMARY KEY,
+    login_id VARCHAR(50) UNIQUE NOT NULL,      -- 직원 로그인 아이디
+    login_pw VARCHAR(255) NOT NULL,            -- 암호화된 비밀번호 (웹 서버에서 Hash 처리)
+    department VARCHAR(50) NOT NULL,           -- 부서 (dev, hr, sales, admin)
+    role_level VARCHAR(20) DEFAULT 'USER',     -- 권한 (user, manager)
+    emp_name VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+이중화 작업 (MASTER 서버 셋팅)
+개발단계에서 slave서버가 들어올 수 있도록 방화벽 설정
+firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="172.30.1.7" port protocol="tcp" port="3306" accept'
+firewall-cmd --reload
+
+vi /etc/my.cnf.d/mariadb-server.cnf (수정)
+[mysqld]
+server-id = 1
+log-bin = mariadb-bin
+
+systemctl restart mariadb
+mysql -u root -p
+CREATE USER 'repl_user'@'172.30.1.7' IDENTIFIED BY 'estwebre!2026';
+GRANT REPLICATION SLAVE ON *.* TO 'repl_user'@'172.30.1.7';
+FLUSH PRIVILEGES;
+SHOW MASTER STATUS;
+
+SLAVE 서버 셋팅
+vi /etc/my.cnf.d/mariadb-server.cnf (수정)
+[mysqld]
+server-id = 2
+read_only = 1
+
+systemctl restart mariadb
+mysql -u root -p
+
+CHANGE MASTER TO
+  MASTER_HOST='172.30.1.61',
+  MASTER_USER='repl_user',
+  MASTER_PASSWORD='estwebre!2026',
+  MASTER_LOG_FILE='mariadb-bin.000002', 
+  MASTER_LOG_POS=801;
+
+START SLAVE;
+SHOW SLAVE STATUS\G
+
+lave_IO_Running = YES 
+Slave_SQL_Running = YES
+로 뜨는지 확인
+
+
+
+
+
+
+
+
+

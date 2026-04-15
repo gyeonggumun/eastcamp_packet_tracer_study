@@ -1,0 +1,77 @@
+Rsyslog 설치
+Server - .101, Client - .102
+
+dnf install -y rsyslog rsyslog-doc(서버/클라이언트 공통)
+
+서버 설정
+vi /etc/rsyslog.conf
+$ModLoad imudp
+$InputUDPServerRun 514 
+
+$ModLoad imtcp
+$InputTCPServerRun 514  // Module 섹션에 추가
+
+firewall-cmd --permanent --add-port=514/tcp
+firewall-cmd --permanent --add-port=514/udp
+firewall-cmd --reload
+
+systemctl start rsyslog
+
+정보 확인 - dnf install -y lsof net-tools
+lsof -i tcp:514
+netstat -natpl | grep 514
+tail -f /var/log/messages
+
+클라이언트 설정
+dnf install -y rsyslog rsyslog-doc
+
+vi /etc/rsyslog.conf
+  *.*   @@192.168.100.101:514*-> UDP 이용 // *.*
+   *.*   @192.168.100.101:514 -> TCP 이용   // 맨 아래에 추가
+
+systemctl start rsyslog
+
+연결 확인
+Server - tail -f /var/log/messages
+Client - systemctl restart sshd 등의 이벤트 발생
+
+---> 클라이언트의 로그가 서버에서 나타나면 됨
+
+### DB 연결 설정
+Server
+dnf install -y rsyslog-mysql
+mysql -u root -p < /usr/share/doc/rsyslog/mysql-createDB.sql  // DB 설정
+mysql -u root -p
+MariaDB [(none)]> GRANT ALL ON Syslog.* TO 'rsyslog'@'localhost' IDENTIFIED BY 'password';   
+MariaDB [(none)]> FLUSH PRIVILEGES;
+
+환경 설정
+vi /etc/rsyslog.conf
+$ModLoad ommysql   
+*.* :ommysql:127.0.0.1,Syslog,rsyslog,password  // DB연결 계정 // *.*
+
+firewall-cmd --permanent --add-port=3306/tcp
+firewall-cmd --reload
+
+systemctl start rsyslog
+
+DB 접속 후 데이터 정보 확인 - 클라이언트 이벤트 발생 데이터
+---> DB에서 로그 데이터가 저장 되는지 확인(select * from SystemEvents;)
+
+Loganalyzer 설정
+dnf install php-mysqli
+wget http://download.adiscon.com/loganalyzer/loganalyzer-4.1.13.tar.gz -P /tmp   
+tar -xzvf /tmp/loganalyzer-4.1.13.tar.gz -C /tmp   
+mkdir /var/www/html/loganalyzer   
+cp -r /tmp/loganalyzer-4.1.13/src/* /var/www/html/loganalyzer   
+cp /tmp/loganalyzer-4.1.13/contrib/configure.sh /var/www/html/loganalyzer   
+  
+cd /var/www/html/loganalyzer   
+bash configure.sh   
+chcon -h -t httpd_sys_script_rw_t config.php - 안해도 됨(Permission error시)
+
+Web - http://192.168.100.101/loganalyzer  // 설치 시작
+Step 3 에서 DB설정 / Step 6에서 loganalyzer 계정 설정   
+Step 7 에서  Source Type -> MYSQL_Native 선택 후 아래 DB 설정
+
+설치 중 에러 발생 시 config.php 삭제 후 bash configure.sh 명령부터 다시 시작

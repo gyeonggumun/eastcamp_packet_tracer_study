@@ -1,0 +1,18 @@
+본사 라우터
+- Access-List 설정
+(config)#access-list 100 permit gre host 1.1.1.1 host 2.2.2.1(host 2.2.2.3 host 1.1.1.1) 
+(config)#access-list 100 permit gre 192.168.100.0 0.0.0.255 host 2.2.2.1(172.16.0.0 0.0.0.255 host 1.1.1.1) 
+- Crypto 정책 설정
+(config)#crypto isakmp policy 10 - 정책식별번호 
+(config-isakmp)#authentication pre-share - 인증 방식 
+(config-isakmp)#encryption 3des - 대칭키 알고리즘
+(config-isakmp)#hash md5 - hash 알고리즘
+(config)#crypto isakmp key 1234 address 2.2.2.1(1.1.1.1) - key값은 동일
+(config)#crypto ipsec transform-set test esp-3des esp-md5-hmac - 정책식별이름 IPSec 암호화 알고리즘 인증 알고리즘 - Crypto map 설정
+(config)#crypto map vpn-map 10 ipsec-isakmp 
+(config-crypto-map)#match address 100 
+(config-crypto-map)#set peer 2.2.2.1(1.1.1.1) 
+(config-crypto-map)#set transform-set test 
+- Crypto map을 인터페이스에 적용
+(config)#interface s0/3/0(s0/3/1)
+(config-if)#crypto map vpn-map
